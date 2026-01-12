@@ -1,0 +1,41 @@
+# ---------------------------
+# Core Dependencies (CPU Only)
+# ---------------------------
+torch==2.3.0+cpu
+torchvision==0.18.0+cpu
+torchaudio==2.3.0+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# ---------------------------
+# Image Processing
+# ---------------------------
+Pillow==10.2.0
+opencv-python==4.10.0.84
+scikit-image==0.24.0
+
+# ---------------------------
+# Numerical & Utility
+# ---------------------------
+numpy==1.26.4
+scipy==1.11.4
+matplotlib==3.8.2
+tqdm==4.66.4
+albumentations==1.4.3
+
+# ---------------------------
+# Deep Learning Utilities
+# ---------------------------
+tensorboard==2.16.2
+protobuf==4.25.3
+
+# ---------------------------
+# File Handling
+# ---------------------------
+pandas==2.2.1
+pyyaml==6.0.1
+
+# ---------------------------
+# Jupyter (optional but useful)
+# ---------------------------
+ipykernel==6.29.4
+notebook==7.1.2
