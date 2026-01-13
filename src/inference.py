@@ -2,6 +2,7 @@ import os
 import torch
 from PIL import Image
 import torchvision.transforms as transforms
+from torchvision.utils import save_image
 
 from generator import Generator
 
@@ -10,7 +11,6 @@ from generator import Generator
 # ---------------------------------------------------------
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-FEATURE = "deblur"
 TASK_ID = 0
 NUM_TASKS = 1
 IMG_SIZE = 256
@@ -29,13 +29,28 @@ def infer(
     print("🔄 Processing... Please wait")
 
     # -------------------------------------------------
+    # Resolve Checkpoint Path (IMPORTANT FIX)
+    # -------------------------------------------------
+    final_ckpt = os.path.join(checkpoint_dir, "G_deblur.pth")
+    last_ckpt = os.path.join(checkpoint_dir, "last.pth")
+
+    if os.path.exists(final_ckpt):
+        print("✅ Using final trained model: G_deblur.pth")
+        state_dict = torch.load(final_ckpt, map_location=DEVICE)
+    elif os.path.exists(last_ckpt):
+        print("⚠️ Final model not found. Using last checkpoint: last.pth")
+        checkpoint = torch.load(last_ckpt, map_location=DEVICE)
+        state_dict = checkpoint["G"]
+    else:
+        raise FileNotFoundError(
+            "No trained model found. Please train the model first."
+        )
+
+    # -------------------------------------------------
     # Load Generator
     # -------------------------------------------------
-    model_path = os.path.join(checkpoint_dir, "G_deblur.pth")
-    assert os.path.exists(model_path), f"Checkpoint not found: {model_path}"
-
     G = Generator(num_tasks=NUM_TASKS).to(DEVICE)
-    G.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    G.load_state_dict(state_dict)
     G.eval()
 
     # -------------------------------------------------
@@ -71,33 +86,29 @@ def infer(
         output = G(input_tensor, task_vector)
 
     # -------------------------------------------------
-    # Denormalize Output [-1,1] → [0,1]
+    # Denormalize [-1,1] → [0,1]
     # -------------------------------------------------
-    output_img = output.squeeze(0).cpu()
-    output_img = (output_img + 1) / 2
+    input_img = (input_tensor.squeeze(0).cpu() + 1) / 2
+    output_img = (output.squeeze(0).cpu() + 1) / 2
+
+    input_img = input_img.clamp(0, 1)
     output_img = output_img.clamp(0, 1)
 
-    output_pil = transforms.ToPILImage()(output_img)
+    # -------------------------------------------------
+    # Save Results
+    # -------------------------------------------------
+    input_save = os.path.join(output_dir, "input.png")
+    output_save = os.path.join(output_dir, "output.png")
+    compare_save = os.path.join(output_dir, "comparison.png")
 
-    # -------------------------------------------------
-    # Save Output
-    # -------------------------------------------------
-    save_path = os.path.join(
-        output_dir,
-        f"deblur_{os.path.basename(image_path)}"
-    )
-    output_pil.save(save_path)
+    save_image(input_img, input_save)
+    save_image(output_img, output_save)
+    save_image(torch.cat([input_img, output_img], dim=2), compare_save)
 
     print("✅ Processing complete")
-    print(f"✔ Output saved to: {save_path}")
-
-    # -------------------------------------------------
-    # DISPLAY IMAGES (SYSTEM IMAGE VIEWER)
-    # -------------------------------------------------
-    print("🖼️ Displaying input and output images...")
-
-    input_pil.resize((IMG_SIZE, IMG_SIZE)).show(title="Input (Blurred)")
-    output_pil.show(title="Output (Deblurred)")
+    print(f"✔ Input saved to: {input_save}")
+    print(f"✔ Output saved to: {output_save}")
+    print(f"✔ Comparison saved to: {compare_save}")
 
 
 # ---------------------------------------------------------
@@ -106,5 +117,5 @@ def infer(
 if __name__ == "__main__":
 
     infer(
-        image_path=r"D:\PROJECTS\Final_Year_Project\implementation\data\paired\deblur\input\3_HUAWEI-NOVA-LITE_.jpg"
+        image_path=r"D:\PROJECTS\Final_Year_Project\GAN dataset\blur_dataset_scaled\motion_blurred\0_IPHONE-SE_M.JPG"
     )
