@@ -96,7 +96,7 @@ def load_checkpoint(G, D, g_opt, d_opt):
 # Training Function
 # ---------------------------------------------------------
 def train(
-    epochs=100,
+    epochs=150,
     batch_size=16,
     lr=2e-4,
 ):

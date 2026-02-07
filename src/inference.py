@@ -21,6 +21,7 @@ IMG_SIZE = 256
 # ---------------------------------------------------------
 def infer(
     image_path,
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     checkpoint_dir="checkpoints",
     output_dir="results/inference",
 ):
@@ -31,8 +32,8 @@ def infer(
     # -------------------------------------------------
     # Resolve Checkpoint Path (IMPORTANT FIX)
     # -------------------------------------------------
-    final_ckpt = os.path.join(checkpoint_dir, "G_deblur.pth")
-    last_ckpt = os.path.join(checkpoint_dir, "last.pth")
+    final_ckpt = os.path.join(PROJECT_ROOT, checkpoint_dir, "G_deblur.pth")
+    last_ckpt = os.path.join(PROJECT_ROOT, checkpoint_dir, "last.pth")
 
     if os.path.exists(final_ckpt):
         print("✅ Using final trained model: G_deblur.pth")
@@ -117,5 +118,5 @@ def infer(
 if __name__ == "__main__":
 
     infer(
-        image_path=r"D:\PROJECTS\Final_Year_Project\GAN dataset\blur_dataset_scaled\motion_blurred\0_IPHONE-SE_M.JPG"
+        image_path=r"D:\PROJECTS\Final_Year_Project\GAN dataset\blur_dataset_scaled\motion_blurred\3_HUAWEI-NOVA-LITE_M.jpg"
     )
