@@ -6,17 +6,9 @@ from torchvision.models.feature_extraction import create_feature_extractor
 
 
 # ---------------------------------------------------------
-# 1. Adversarial Loss (GAN Loss)
+# 1. Adversarial Loss
 # ---------------------------------------------------------
 class GANLoss(nn.Module):
-    """
-    Adversarial loss for GAN training.
-
-    Supported modes:
-    - 'bce'   : Binary Cross Entropy (Vanilla GAN)
-    - 'hinge' : Hinge Loss (default, more stable)
-    """
-
     def __init__(self, gan_mode="hinge"):
         super().__init__()
         self.gan_mode = gan_mode
@@ -36,19 +28,13 @@ class GANLoss(nn.Module):
                 return torch.mean(F.relu(1.0 + prediction))
 
         else:
-            raise NotImplementedError(f"Unsupported GAN mode: {self.gan_mode}")
+            raise NotImplementedError
 
 
 # ---------------------------------------------------------
 # 2. Reconstruction Loss
 # ---------------------------------------------------------
 class ReconstructionLoss(nn.Module):
-    """
-    Pixel-wise reconstruction loss.
-    - L1 : preferred for sharper images
-    - L2 : smoother but may blur
-    """
-
     def __init__(self, mode="l1"):
         super().__init__()
         if mode == "l1":
@@ -66,10 +52,6 @@ class ReconstructionLoss(nn.Module):
 # 3. Perceptual Loss (VGG19)
 # ---------------------------------------------------------
 class PerceptualLoss(nn.Module):
-    """
-    Perceptual loss using pretrained VGG19 feature maps.
-    """
-
     def __init__(self, layers=None):
         super().__init__()
 
@@ -82,26 +64,26 @@ class PerceptualLoss(nn.Module):
         for p in vgg.parameters():
             p.requires_grad = False
 
-        self.feature_extractor = create_feature_extractor(
+        self.extractor = create_feature_extractor(
             vgg,
             return_nodes={
                 "3": "relu1_2",
                 "8": "relu2_2",
                 "17": "relu3_4",
-                "26": "relu4_4"
-            }
+                "26": "relu4_4",
+            },
         )
 
         self.layers = layers
         self.criterion = nn.L1Loss()
 
     def forward(self, pred, target):
-        pred_features = self.feature_extractor(pred)
-        target_features = self.feature_extractor(target)
+        pred_f = self.extractor(pred)
+        target_f = self.extractor(target)
 
         loss = 0.0
         for layer in self.layers:
-            loss += self.criterion(pred_features[layer], target_features[layer])
+            loss += self.criterion(pred_f[layer], target_f[layer])
 
         return loss
 
@@ -110,10 +92,6 @@ class PerceptualLoss(nn.Module):
 # 4. Total Variation Loss
 # ---------------------------------------------------------
 class TotalVariationLoss(nn.Module):
-    """
-    Encourages spatial smoothness in generated images.
-    """
-
     def forward(self, img):
         loss_h = torch.mean(torch.abs(img[:, :, :, :-1] - img[:, :, :, 1:]))
         loss_v = torch.mean(torch.abs(img[:, :, :-1, :] - img[:, :, 1:, :]))
@@ -121,26 +99,73 @@ class TotalVariationLoss(nn.Module):
 
 
 # ---------------------------------------------------------
-# 5. Unified Conditional GAN (UcGAN) Total Loss
+# 5. Multi-Scale Loss
+# ---------------------------------------------------------
+def multi_scale_loss(pred, target):
+    loss = 0.0
+
+    # Full scale
+    loss += F.l1_loss(pred, target)
+
+    # Half scale
+    pred_half = F.interpolate(pred, scale_factor=0.5, mode="bilinear", align_corners=False)
+    target_half = F.interpolate(target, scale_factor=0.5, mode="bilinear", align_corners=False)
+    loss += F.l1_loss(pred_half, target_half)
+
+    # Quarter scale
+    pred_quarter = F.interpolate(pred, scale_factor=0.25, mode="bilinear", align_corners=False)
+    target_quarter = F.interpolate(target, scale_factor=0.25, mode="bilinear", align_corners=False)
+    loss += F.l1_loss(pred_quarter, target_quarter)
+
+    return loss
+
+
+# ---------------------------------------------------------
+# 6. Edge-Aware Loss (Sobel)
+# ---------------------------------------------------------
+def edge_loss(pred, target):
+    sobel_x = torch.tensor([[1,0,-1],[2,0,-2],[1,0,-1]], dtype=torch.float32, device=pred.device)
+    sobel_y = torch.tensor([[1,2,1],[0,0,0],[-1,-2,-1]], dtype=torch.float32, device=pred.device)
+
+    sobel_x = sobel_x.view(1,1,3,3)
+    sobel_y = sobel_y.view(1,1,3,3)
+
+    pred_gray = pred.mean(1, keepdim=True)
+    target_gray = target.mean(1, keepdim=True)
+
+    pred_edge = F.conv2d(pred_gray, sobel_x, padding=1) + \
+                F.conv2d(pred_gray, sobel_y, padding=1)
+
+    target_edge = F.conv2d(target_gray, sobel_x, padding=1) + \
+                  F.conv2d(target_gray, sobel_y, padding=1)
+
+    return F.l1_loss(pred_edge, target_edge)
+
+
+# ---------------------------------------------------------
+# 7. Frequency Loss (FFT-based)
+# ---------------------------------------------------------
+def frequency_loss(pred, target):
+    pred_fft = torch.fft.fft2(pred)
+    target_fft = torch.fft.fft2(target)
+
+    return torch.mean(torch.abs(pred_fft - target_fft))
+
+
+# ---------------------------------------------------------
+# 8. Unified Conditional GAN Loss
 # ---------------------------------------------------------
 class UcGANLoss(nn.Module):
-    """
-    Combined loss for Unified Conditional GAN.
-
-    Generator Objective:
-        L_G = L_adv
-            + λ_rec * L_rec
-            + λ_perc * L_perc
-            + λ_tv * L_tv
-    """
-
     def __init__(
         self,
         gan_mode="hinge",
         recon_mode="l1",
         lambda_recon=100.0,
         lambda_perceptual=10.0,
-        lambda_tv=0.0
+        lambda_tv=0.0,
+        lambda_edge=5.0,
+        lambda_ms=1.0,
+        lambda_freq=0.1
     ):
         super().__init__()
 
@@ -152,21 +177,31 @@ class UcGANLoss(nn.Module):
         self.lambda_recon = lambda_recon
         self.lambda_percep = lambda_perceptual
         self.lambda_tv = lambda_tv
+        self.lambda_edge = lambda_edge
+        self.lambda_ms = lambda_ms
+        self.lambda_freq = lambda_freq
 
     # ---------------------------
     # Generator Loss
     # ---------------------------
     def generator_loss(self, pred_fake, fake_img, real_img):
+
         adv = self.gan_loss(pred_fake, True)
         rec = self.recon_loss(fake_img, real_img)
         perc = self.perceptual_loss(fake_img, real_img)
         tv = self.tv_loss(fake_img)
+        edge = edge_loss(fake_img, real_img)
+        ms = multi_scale_loss(fake_img, real_img)
+        freq = frequency_loss(fake_img, real_img)
 
         total = (
             adv
             + self.lambda_recon * rec
             + self.lambda_percep * perc
             + self.lambda_tv * tv
+            + self.lambda_edge * edge
+            + self.lambda_ms * ms
+            + self.lambda_freq * freq
         )
 
         return total, {
@@ -174,7 +209,10 @@ class UcGANLoss(nn.Module):
             "recon": rec.item(),
             "perceptual": perc.item(),
             "tv": tv.item(),
-            "total": total.item()
+            "edge": edge.item(),
+            "multiscale": ms.item(),
+            "frequency": freq.item(),
+            "total": total.item(),
         }
 
     # ---------------------------
@@ -188,5 +226,5 @@ class UcGANLoss(nn.Module):
         return total, {
             "real": real_loss.item(),
             "fake": fake_loss.item(),
-            "total": total.item()
+            "total": total.item(),
         }
