@@ -75,7 +75,7 @@ def save_checkpoint(epoch, G, D, g_opt, d_opt):
             "g_opt": g_opt.state_dict(),
             "d_opt": d_opt.state_dict(),
         },
-        os.path.join(CHECKPOINT_DIR, "last.pth"),
+        os.path.join(CHECKPOINT_DIR, "last_1.pth"),
     )
 
 def load_checkpoint(G, D, g_opt, d_opt):
