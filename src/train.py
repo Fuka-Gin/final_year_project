@@ -14,7 +14,6 @@ from metrics import evaluate_metrics
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_ROOT = os.path.join(PROJECT_ROOT, "data", "paired", "lowlight")
 
 CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
 SAMPLE_DIR = os.path.join(PROJECT_ROOT, "results", "samples")
@@ -46,12 +45,28 @@ FEATURE_CONFIG = {
         "lambda_edge": 3,
         "lambda_ms": 1,
         "lambda_freq": 0.05
+    },
+    "artistic": {
+        "id": 2,
+        "gan_mode": "hinge",
+        "recon_mode": "l1",
+        "lambda_recon": 10,
+        "lambda_perceptual": 40,
+        "lambda_tv": 1,
+        "lambda_edge": 2,
+        "lambda_ms": 1,
+        "lambda_freq": 0.1
     }
 }
 
-FEATURE = "lowlight"
+FEATURE = "artistic"
 TASK_ID = FEATURE_CONFIG[FEATURE]["id"]
 NUM_TASKS = len(FEATURE_CONFIG)
+
+if FEATURE == "artistic":
+    DATA_ROOT = os.path.join(PROJECT_ROOT, "data", "unpaired", "artistic")
+else:
+    DATA_ROOT = os.path.join(PROJECT_ROOT, "data", "paired", FEATURE)
 
 # Task Vector
 def get_task_vector(batch_size, task_id):
@@ -83,34 +98,86 @@ def save_checkpoint(epoch, G, D, g_opt, d_opt):
             "g_opt": g_opt.state_dict(),
             "d_opt": d_opt.state_dict(),
         },
-        os.path.join(CHECKPOINT_DIR, "last_2.pth"),
+        os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.pth"),
     )
 
 def load_checkpoint(G, D, g_opt, d_opt):
-    path = os.path.join(CHECKPOINT_DIR, "last_2.pth")
+
+    path = os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.pth")
+
     if not os.path.exists(path):
+        print("No checkpoint found. Starting training from scratch.")
         return 0
 
+    print(f"Loading checkpoint: {path}")
+
     checkpoint = torch.load(path, map_location=DEVICE)
-    G.load_state_dict(checkpoint["G"], strict=False)
-    D.load_state_dict(checkpoint["D"], strict=False)
-    try:
-        g_opt.load_state_dict(checkpoint["g_opt"])
-        d_opt.load_state_dict(checkpoint["d_opt"])
-    except ValueError as e:
-        print(f"⚠️ Warning: Optimizer state could not be loaded due to mismatch. Optimizers will be reinitialized.\n{e}")
-    print(f"🔁 Resuming training from epoch {checkpoint['epoch'] + 1}")
-    return checkpoint["epoch"] + 1
+
+    # Case 1: Full checkpoint dictionary
+    if isinstance(checkpoint, dict) and "G" in checkpoint:
+
+        G.load_state_dict(checkpoint["G"], strict=False)
+        D.load_state_dict(checkpoint["D"], strict=False)
+
+        try:
+            g_opt.load_state_dict(checkpoint["g_opt"])
+            d_opt.load_state_dict(checkpoint["d_opt"])
+        except:
+            print("⚠ Optimizer state incompatible. Reinitializing.")
+
+        start_epoch = checkpoint["epoch"] + 1
+
+        print(f"🔁 Resuming training from epoch {start_epoch}")
+
+        return start_epoch
+
+    # Case 2: Generator-only weights
+    else:
+
+        print("⚠ Generator-only checkpoint detected.")
+
+        model_dict = G.state_dict()
+
+        for k in model_dict.keys():
+
+            if k in checkpoint:
+
+                if model_dict[k].shape == checkpoint[k].shape:
+                    model_dict[k] = checkpoint[k]
+
+                # handle expanded first conv layer
+                elif "initial.0.weight" in k:
+
+                    old_w = checkpoint[k]
+                    new_w = model_dict[k]
+
+                    new_w[:, :old_w.shape[1], :, :] = old_w
+
+                    torch.nn.init.normal_(
+                        new_w[:, old_w.shape[1]:, :, :],
+                        mean=0,
+                        std=0.02
+                    )
+
+                    model_dict[k] = new_w
+
+        G.load_state_dict(model_dict)
+
+        print("✔ Generator weights transferred (expanded tasks)")
+
+        return 0
 
 # Training Function
 def train(
     epochs=100,
     batch_size=8,
-    lr=2e-4,
+    lr=1e-4,
 ):
     # Dataset
-    train_ds = UcGANDataset(DATA_ROOT, mode="train")
-    val_ds = UcGANDataset(DATA_ROOT, mode="val")
+    paired = FEATURE != "artistic"
+
+    train_ds = UcGANDataset(DATA_ROOT, mode="train", paired=paired)
+    val_ds = UcGANDataset(DATA_ROOT, mode="val", paired=paired)
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
@@ -190,8 +257,8 @@ def train(
 
         save_checkpoint(epoch, G, D, g_opt, d_opt)
 
-    torch.save(G.state_dict(), os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.pth"))
-    print("✅ Training completed successfully")
+    save_checkpoint(epoch, G, D, g_opt, d_opt)
+    print(f"✅ Training completed for {FEATURE} feature")
 
 # Entry Point
 if __name__ == "__main__":

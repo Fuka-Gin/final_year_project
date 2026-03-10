@@ -21,13 +21,15 @@ class Discriminator(nn.Module):
 
         def disc_block(in_ch, out_ch, stride=2, normalize=True):
             layers = [
-                nn.Conv2d(
-                    in_ch,
-                    out_ch,
-                    kernel_size=4,
-                    stride=stride,
-                    padding=1,
-                    bias=not normalize
+                nn.utils.spectral_norm(
+                    nn.Conv2d(
+                        in_ch,
+                        out_ch,
+                        kernel_size=4,
+                        stride=stride,
+                        padding=1,
+                        bias=not normalize
+                    )
                 )
             ]
             if normalize:
