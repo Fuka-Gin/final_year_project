@@ -61,7 +61,7 @@ FEATURE_CONFIG = {
 
 FEATURE = "artistic"
 TASK_ID = FEATURE_CONFIG[FEATURE]["id"]
-NUM_TASKS = len(FEATURE_CONFIG)
+NUM_TASKS = 3
 
 if FEATURE == "artistic":
     DATA_ROOT = os.path.join(PROJECT_ROOT, "data", "unpaired", "artistic")
@@ -169,7 +169,7 @@ def load_checkpoint(G, D, g_opt, d_opt):
 
 # Training Function
 def train(
-    epochs=100,
+    epochs=200,
     batch_size=8,
     lr=1e-4,
 ):

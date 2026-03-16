@@ -34,7 +34,7 @@ def infer(image_path, feature, task_id, num_tasks):
     # -------------------------------------------------
     # Load Model
     # -------------------------------------------------
-    model_path = os.path.join(checkpoint_dir, f"G_{feature}.pth")
+    model_path = os.path.join(checkpoint_dir, "last_2.pth")
 
     if not os.path.exists(model_path):
         raise FileNotFoundError(
@@ -92,9 +92,9 @@ def infer(image_path, feature, task_id, num_tasks):
     # -------------------------------------------------
     # Save Results
     # -------------------------------------------------
-    input_save = os.path.join(output_dir, "input.png")
-    output_save = os.path.join(output_dir, "output.png")
-    compare_save = os.path.join(output_dir, "comparison.png")
+    input_save = os.path.join(output_dir, "input_1.png")
+    output_save = os.path.join(output_dir, "output_1.png")
+    compare_save = os.path.join(output_dir, "comparison_1.png")
 
     save_image(input_img, input_save)
     save_image(output_img, output_save)
