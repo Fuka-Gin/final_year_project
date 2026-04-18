@@ -1,208 +1,228 @@
-# 🖼️ UcGAN – Unified Conditional GAN for Image Restoration
+# 🚀 UcGAN Image Enhancement System
 
-This project implements a **Unified Conditional Generative Adversarial Network (UcGAN)** for **image restoration tasks**, with a primary focus on **Blur → Sharp Image Restoration (Deblurring)**.
+## 📌 Overview
 
-The model is designed to be **extensible**, allowing additional image-to-image tasks (e.g., denoising, low-light enhancement) to be integrated using the same architecture by changing datasets and task conditions.
+UcGAN is a deep learning-based image enhancement system that performs:
 
----
+* Deblurring
+* Low-light enhancement
+* Image quality analysis
+* Intelligent recommendations
 
-## 🚀 Key Features
-
-* ✅ **Unified Conditional GAN (UcGAN) Architecture**
-* ✅ **ResNet-based Generator**
-* ✅ **PatchGAN Discriminator**
-* ✅ **Task-conditioning using one-hot vectors**
-* ✅ **Perceptual Loss using pretrained VGG19**
-* ✅ **Automatic Train/Validation Split**
-* ✅ **Paired Data Augmentation**
-* ✅ **Resume Training & Fine-tuning Support**
-* ✅ **Single-image Inference Support**
+The system uses a **GAN-based architecture** along with **YOLO object detection** and **BLIP captioning** to provide a complete image enhancement pipeline.
 
 ---
 
-## 📌 Implemented Feature
+## 🧠 Key Features
 
-### ✔ Blur → Sharp Image Restoration (Deblurring)
-
-* **Input:** Blurred image
-* **Output:** Restored sharp image
-* **Training:** Supervised (paired dataset)
-
-This feature is fully implemented, trained, and tested.
-
----
-
-## 🧠 Model Architecture
-
-### Generator
-
-* ResNet-based encoder–decoder
-* Task-conditioning via spatially expanded one-hot vectors
-* Instance Normalization for stability
-* Tanh output for normalized image generation
-
-### Discriminator
-
-* Conditional PatchGAN (70×70)
-* Receives both image and task vector
-* Predicts realism at patch level
+* 🔍 Image Quality Analysis (Brightness, Blur, Contrast, Noise)
+* 💡 Smart Recommendations
+* 🎯 User-guided enhancement (Deblur / Low-light)
+* 📊 Before vs After comparison
+* 🧾 Output report generation
+* 🖼️ Object detection (YOLOv8)
+* 📝 Image captioning (BLIP)
+* 🌐 Interactive UI (Gradio)
 
 ---
 
-## 📂 Project Structure
+## 🏗️ System Architecture
 
-```
-UcGAN/
-├── src/
-│   ├── train.py              # Training script (with resume support)
-│   ├── inference.py          # Single-image inference
-│   ├── generator.py          # Generator network
-│   ├── discriminator.py      # Discriminator network
-│   ├── residual_blocks.py    # Residual blocks
-│   ├── loss_functions.py     # GAN + Reconstruction + Perceptual loss
-│   ├── dataset.py            # Dataset loader with augmentation
-│   └── metrics.py            # PSNR, SSIM, etc.
-│
-├── data/                     # (Ignored in GitHub)
-│   └── paired/
-│       └── deblur/
-│           ├── input/
-│           └── target/
-│
-├── checkpoints/              # Saved model weights (ignored)
-├── results/
-│   └── samples/              # Training & inference outputs
-│
-├── requirements.txt
-├── README.md
-└── .gitignore
+```text
+Input Image
+   ↓
+Image Analysis
+   ↓
+Suggestions
+   ↓
+User selects feature
+   ↓
+Generator (UcGAN)
+   ↓
+Enhanced Image
+   ↓
+Output Analysis
+   ↓
+Final Report
 ```
 
 ---
 
-## 📊 Dataset
+## ⚙️ Key Components
 
-### Primary Dataset (Recommended)
+### 1. Generator (G)
 
-* **GoPro Deblurring Dataset**
-* Real-world motion blur with paired sharp ground truth
-
-🔗 Dataset link:
-[https://seungjunnah.github.io/Datasets/gopro](https://seungjunnah.github.io/Datasets/gopro)
-
-### Expected Dataset Format
-
-```
-data/paired/deblur/
-├── input/    # Blurred images
-└── target/   # Sharp images
-```
-
-> ⚠️ Datasets are **not included** in this repository due to size and licensing constraints.
+* Enhances images (Deblur / Low-light)
+* Uses CNN-based architecture
+* Takes input image + task vector
 
 ---
 
-## 🔧 Installation
+### 2. Discriminator (D)
 
-### 1️⃣ Create Environment
+* Classifies images as real or fake
+* Improves generator quality
+
+---
+
+### 3. Loss Functions
+
+* GAN Loss → realism
+* L1 Loss → accuracy
+* Perceptual Loss → visual quality
+* TV Loss → smoothness
+
+---
+
+### 4. Analysis Module
+
+* Calculates brightness, blur, contrast
+* Generates recommendations
+* Evaluates improvement
+
+---
+
+### 5. YOLO (Object Detection)
+
+* Detects objects in output image
+
+---
+
+### 6. BLIP (Captioning)
+
+* Generates image description
+
+---
+
+## 🛠️ Installation
+
+### Step 1: Clone Project
+
+```bash
+git clone <your-repo-url>
+cd UcGAN
+```
+
+---
+
+### Step 2: Create Virtual Environment (Recommended)
+
+```bash
+python -m venv venv
+venv\Scripts\activate   # Windows
+```
+
+---
+
+### Step 3: Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2️⃣ Verify PyTorch
+---
 
-```bash
-python -c "import torch; print(torch.__version__)"
+### Step 4: Install Tesseract (Optional)
+
+Download from:
+https://github.com/tesseract-ocr/tesseract
+
+---
+
+## 📂 Project Structure
+
+```text
+UcGAN/
+│
+├── src/
+│   ├── generator.py
+│   ├── discriminator.py
+│   ├── train.py
+│   ├── inference.py
+│   ├── analysis.py
+│   ├── app.py
+│
+├── data/
+├── checkpoints/
+├── results/
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
-## 🏋️ Training the Model
+## ▶️ How to Run
 
-### Start Training
-
-```bash
-python src/train.py
-```
-
-### Resume Training
-
-Training automatically resumes from the last saved checkpoint if available.
-
----
-
-## 🧪 Inference (Single Image)
+### 🔹 Run Training
 
 ```bash
-python src/inference.py
+python train.py
 ```
 
-You can provide **absolute image paths** inside `inference.py`.
+---
+
+### 🔹 Run Inference (CLI)
+
+```bash
+python inference.py
+```
 
 ---
 
-## 📈 Loss Functions Used
+### 🔹 Run Web Application (Recommended)
 
-* **Adversarial Loss:** Hinge Loss
-* **Reconstruction Loss:** L2 (for deblurring)
-* **Perceptual Loss:** VGG19 feature loss
-* **Total Variation Loss:** Spatial smoothness
+```bash
+python app.py
+```
 
-> The VGG19 network is used **only for perceptual loss** and is not trained.
+Then open browser:
 
----
-
-## 🧠 Pretrained Models
-
-* ✔ **VGG19 (ImageNet)** used for perceptual loss
-* ❌ Generator & Discriminator trained **from scratch**
-* ❌ Trained weights are **not uploaded** to GitHub
+```text
+http://127.0.0.1:7860
+```
 
 ---
 
-## 📁 GitHub Usage Policy
+## 🔄 Workflow
 
-The following are **excluded** from the repository:
+1. Upload image
+2. Click **Analyze Image**
+3. View suggestions
+4. Select enhancement feature
+5. Click **Enhance Image**
+6. View:
 
-* Datasets
-* Model checkpoints (`.pth`)
-* Cache files
-
-These are listed in `.gitignore`.
-
----
-
-## 📌 Future Extensions
-
-The architecture supports additional tasks such as:
-
-* Image Denoising
-* Low-light Enhancement
-* Super-resolution
-* Reflection Removal
-
-Only dataset and loss configuration changes are required.
+   * Enhanced image
+   * Improvement report
+   * New suggestions
 
 ---
 
-## 🧾 Academic Note
+## 📊 Evaluation Metrics
 
-This project follows standard research practices used in IEEE publications:
-
-* No dataset redistribution
-* Clear training pipeline
-* Reproducible experiments
-* Proper use of pretrained feature extractors
+* PSNR (Peak Signal-to-Noise Ratio)
+* SSIM (Structural Similarity Index)
 
 ---
 
-## 👨‍🎓 Author
+## 💻 Hardware Used
 
-**Final Year Project – Unified Conditional GAN for Image Restoration**
+* Intel i3 CPU
+* 8GB RAM
+* No GPU (local)
+* Kaggle GPU used for training
 
 ---
 
-## 📜 License
+## 🚀 Future Improvements
 
-This project is intended for **academic and research use only**.
+* Add more enhancement tasks
+* Automatic feature selection
+* Mobile deployment
+* Real-time processing
+
+---
+
+## 🏁 Conclusion
+
+UcGAN provides a unified and intelligent framework for image enhancement by combining deep learning with user-guided analysis and evaluation.

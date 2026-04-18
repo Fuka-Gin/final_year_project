@@ -1,5 +1,4 @@
 /data
 /src/__pycache__/
 /src/results
-/results
-/pretrained
+/src/test_img

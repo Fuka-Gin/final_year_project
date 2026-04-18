@@ -10,19 +10,20 @@ from loss_functions import UcGANLoss
 from dataset import UcGANDataset
 from metrics import evaluate_metrics
 
+# ---------------------------------------------------------
 # Device & Paths
+# ---------------------------------------------------------
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
-SAMPLE_DIR = os.path.join(PROJECT_ROOT, "results", "samples")
-
-os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+CHECKPOINT_DIR = "/kaggle/working/src"
+SAMPLE_DIR = "/kaggle/working/results/samples"
 os.makedirs(SAMPLE_DIR, exist_ok=True)
 
-
-# Feature Configuration
+# ---------------------------------------------------------
+# Feature Configuration (DO NOT CHANGE LOGIC)
+# ---------------------------------------------------------
 FEATURE_CONFIG = {
     "deblur": {
         "id": 0,
@@ -31,9 +32,6 @@ FEATURE_CONFIG = {
         "lambda_recon": 70,
         "lambda_perceptual": 10,
         "lambda_tv": 2,
-        "lambda_edge": 5,
-        "lambda_ms": 1,
-        "lambda_freq": 0.1
     },
     "lowlight": {
         "id": 1,
@@ -45,36 +43,26 @@ FEATURE_CONFIG = {
         "lambda_edge": 3,
         "lambda_ms": 1,
         "lambda_freq": 0.05
-    },
-    "artistic": {
-        "id": 2,
-        "gan_mode": "hinge",
-        "recon_mode": "l1",
-        "lambda_recon": 10,
-        "lambda_perceptual": 40,
-        "lambda_tv": 1,
-        "lambda_edge": 2,
-        "lambda_ms": 1,
-        "lambda_freq": 0.1
     }
 }
 
-FEATURE = "artistic"
+FEATURE = "deblur"
 TASK_ID = FEATURE_CONFIG[FEATURE]["id"]
-NUM_TASKS = 3
+NUM_TASKS = len(FEATURE_CONFIG)
 
-if FEATURE == "artistic":
-    DATA_ROOT = os.path.join(PROJECT_ROOT, "data", "unpaired", "artistic")
-else:
-    DATA_ROOT = os.path.join(PROJECT_ROOT, "data", "paired", FEATURE)
+DATA_ROOT = os.path.join("D:\PROJECTS\Final_Year_Project\implementation\data\paired", FEATURE)
 
+# ---------------------------------------------------------
 # Task Vector
+# ---------------------------------------------------------
 def get_task_vector(batch_size, task_id):
     task = torch.zeros(batch_size, NUM_TASKS, device=DEVICE)
     task[:, task_id] = 1.0
     return task
 
-# Loss Function
+# ---------------------------------------------------------
+# Loss Factory
+# ---------------------------------------------------------
 def create_loss_function():
     cfg = FEATURE_CONFIG[FEATURE]
     return UcGANLoss(
@@ -83,13 +71,14 @@ def create_loss_function():
         lambda_recon=cfg["lambda_recon"],
         lambda_perceptual=cfg["lambda_perceptual"],
         lambda_tv=cfg["lambda_tv"],
-        lambda_edge=cfg["lambda_edge"],
-        lambda_ms=cfg["lambda_ms"],
-        lambda_freq=cfg["lambda_freq"],
     )
 
+# ---------------------------------------------------------
 # Checkpoint Utilities
+# ---------------------------------------------------------
 def save_checkpoint(epoch, G, D, g_opt, d_opt):
+    tmp_path  = os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.tmp")
+    final_path = os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.pth")
     torch.save(
         {
             "epoch": epoch,
@@ -98,105 +87,75 @@ def save_checkpoint(epoch, G, D, g_opt, d_opt):
             "g_opt": g_opt.state_dict(),
             "d_opt": d_opt.state_dict(),
         },
-        os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.pth"),
+        tmp_path,
     )
+    os.replace(tmp_path, final_path)  # atomic — never leaves a partial file
 
 def load_checkpoint(G, D, g_opt, d_opt):
+    # 1. Path to your UPLOADED model
+    uploaded_path = "/kaggle/input/models/johnprathapsingh/g-deblur/pytorch/version1/1/G_deblur_2.pth"
+    
+    # 2. Path to the model saved during CURRENT session training
+    session_path = os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.pth")
 
-    path = os.path.join(CHECKPOINT_DIR, f"G_{FEATURE}.pth")
-
-    if not os.path.exists(path):
-        print("No checkpoint found. Starting training from scratch.")
-        return 0
-
-    print(f"Loading checkpoint: {path}")
-
-    checkpoint = torch.load(path, map_location=DEVICE)
-
-    # Case 1: Full checkpoint dictionary
-    if isinstance(checkpoint, dict) and "G" in checkpoint:
-
-        G.load_state_dict(checkpoint["G"], strict=False)
-        D.load_state_dict(checkpoint["D"], strict=False)
-
-        try:
-            g_opt.load_state_dict(checkpoint["g_opt"])
-            d_opt.load_state_dict(checkpoint["d_opt"])
-        except:
-            print("⚠ Optimizer state incompatible. Reinitializing.")
-
-        start_epoch = checkpoint["epoch"] + 1
-
-        print(f"🔁 Resuming training from epoch {start_epoch}")
-
-        return start_epoch
-
-    # Case 2: Generator-only weights
+    # Priority: Use session checkpoint if it exists, otherwise use uploaded model
+    if os.path.exists(session_path):
+        path = session_path
+    elif os.path.exists(uploaded_path):
+        path = uploaded_path
     else:
-
-        print("⚠ Generator-only checkpoint detected.")
-
-        model_dict = G.state_dict()
-
-        for k in model_dict.keys():
-
-            if k in checkpoint:
-
-                if model_dict[k].shape == checkpoint[k].shape:
-                    model_dict[k] = checkpoint[k]
-
-                # handle expanded first conv layer
-                elif "initial.0.weight" in k:
-
-                    old_w = checkpoint[k]
-                    new_w = model_dict[k]
-
-                    new_w[:, :old_w.shape[1], :, :] = old_w
-
-                    torch.nn.init.normal_(
-                        new_w[:, old_w.shape[1]:, :, :],
-                        mean=0,
-                        std=0.02
-                    )
-
-                    model_dict[k] = new_w
-
-        G.load_state_dict(model_dict)
-
-        print("✔ Generator weights transferred (expanded tasks)")
-
+        print("No checkpoint found. Starting from scratch.")
         return 0
 
-# Training Function
-def train(
-    epochs=200,
-    batch_size=8,
-    lr=1e-4,
-):
-    # Dataset
-    paired = FEATURE != "artistic"
+    checkpoint = torch.load(path, map_location=DEVICE, weights_only=False)
+    G.load_state_dict(checkpoint["G"])
+    D.load_state_dict(checkpoint["D"])
+    g_opt.load_state_dict(checkpoint["g_opt"])
+    d_opt.load_state_dict(checkpoint["d_opt"])
 
-    train_ds = UcGANDataset(DATA_ROOT, mode="train", paired=paired)
-    val_ds = UcGANDataset(DATA_ROOT, mode="val", paired=paired)
+    print(f"🔁 Resuming training from epoch {checkpoint['epoch'] + 1}")
+    return checkpoint["epoch"] + 1
+
+
+# ---------------------------------------------------------
+# Training Function
+# ---------------------------------------------------------
+def train(
+    epochs=20,
+    batch_size=8,
+    lr=2e-5,
+):
+    # --------------------
+    # Dataset
+    # --------------------
+    train_ds = UcGANDataset(DATA_ROOT, mode="train")
+    val_ds   = UcGANDataset(DATA_ROOT, mode="val")
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
+    # --------------------
     # Models
+    # --------------------
     G = Generator(num_tasks=NUM_TASKS).to(DEVICE)
     D = Discriminator(num_tasks=NUM_TASKS).to(DEVICE)
     print("Generator and Discriminator initialized.")
-
+    # --------------------
     # Loss & Optimizers
+    # --------------------
     criterion = create_loss_function()
 
     g_opt = torch.optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
     d_opt = torch.optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
 
+    # --------------------
     # Resume Training
+    # --------------------
     start_epoch = load_checkpoint(G, D, g_opt, d_opt)
 
+    # --------------------
     # Training Loop
+    # --------------------
     for epoch in range(start_epoch, epochs):
         print(f"Epoch [{epoch+1}/{epochs}] has started.")
         G.train()
@@ -228,10 +187,12 @@ def train(
             g_loss.backward()
             g_opt.step()
 
+        # --------------------
         # Validation
+        # --------------------
         print("Evaluating on validation set...")
         G.eval()
-        metrics = {"PSNR": [], "SSIM": [], "F-Score": [], "Hausdorff": []}
+        metrics = {"PSNR": [], "SSIM": []}
 
         with torch.no_grad():
             for inp, tgt in val_loader:
@@ -247,20 +208,23 @@ def train(
             f"SSIM: {np.mean(metrics['SSIM']):.4f}"
         )
 
+        # --------------------
         # Save Sample & Checkpoint
+        # --------------------
         save_image(
             torch.cat([inp, fake, tgt], 0),
-            os.path.join(SAMPLE_DIR, f"{FEATURE}_epoch_{epoch+1}.png"),
+            os.path.join(SAMPLE_DIR, f"deblur_epoch_{epoch+1}.png"),
             normalize=True,
             value_range=(-1, 1),
         )
 
         save_checkpoint(epoch, G, D, g_opt, d_opt)
 
-    save_checkpoint(epoch, G, D, g_opt, d_opt)
-    print(f"✅ Training completed for {FEATURE} feature")
+    print("✅ Training completed successfully")
 
+# ---------------------------------------------------------
 # Entry Point
+# ---------------------------------------------------------
 if __name__ == "__main__":
     print("Model training has started...")
     train()

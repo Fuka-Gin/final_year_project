@@ -7,48 +7,50 @@ from torchvision.utils import save_image
 from generator import Generator
 
 # ---------------------------------------------------------
-# CONFIG
+# CONFIG (MATCH TRAINING EXACTLY)
 # ---------------------------------------------------------
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 IMG_SIZE = 256
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 FEATURES = {
-    "1": ("deblur", 0, 1),
+    "1": ("deblur",   0, 1),
     "2": ("lowlight", 1, 2),
-    "3": ("artistic", 2, 3)
+    "3": ("artistic", 2, 3),
 }
 
 # ---------------------------------------------------------
 # Inference Function
 # ---------------------------------------------------------
-def infer(image_path, feature, task_id, num_tasks):
-    checkpoint_dir = os.path.join(PROJECT_ROOT, "checkpoints")
-    output_dir = os.path.join(PROJECT_ROOT, "results", "inference")
-
+def infer(image_path,feature, task_id, num_tasks):
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    checkpoint_dir="checkpoints"
+    output_dir="results/inference"
     os.makedirs(output_dir, exist_ok=True)
 
     print("🔄 Processing... Please wait")
 
     # -------------------------------------------------
-    # Load Model
+    # Resolve Checkpoint Path (IMPORTANT FIX)
     # -------------------------------------------------
-    model_path = os.path.join(checkpoint_dir, "last_2.pth")
+    ckpt_path = os.path.join(PROJECT_ROOT, checkpoint_dir, f"G_{feature}.pth")
 
-    if not os.path.exists(model_path):
+    if not os.path.exists(ckpt_path):
         raise FileNotFoundError(
-            f"Model not found: {model_path}\nTrain the model first."
+            f"Model not found: {ckpt_path}\nTrain the {feature} model first."
         )
 
-    print(f"✅ Using trained model: {model_path}")
 
+    checkpoint = torch.load(ckpt_path, map_location=DEVICE, weights_only=False)
+    state_dict = checkpoint["G"] if isinstance(checkpoint, dict) and "G" in checkpoint else checkpoint
+    # -------------------------------------------------
+    # Load Generator
+    # -------------------------------------------------
     G = Generator(num_tasks=num_tasks).to(DEVICE)
-    G.load_state_dict(torch.load(model_path, map_location=DEVICE), strict=False)
+    G.load_state_dict(state_dict, strict=False)
     G.eval()
 
     # -------------------------------------------------
-    # Transform
+    # Transform (MATCH TRAINING)
     # -------------------------------------------------
     transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
@@ -62,10 +64,11 @@ def infer(image_path, feature, task_id, num_tasks):
     # -------------------------------------------------
     # Load Image
     # -------------------------------------------------
+    # Load image
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
-
-    input_pil = Image.open(image_path).convert("RGB")
+ 
+    input_pil    = Image.open(image_path).convert("RGB")
     input_tensor = transform(input_pil).unsqueeze(0).to(DEVICE)
 
     # -------------------------------------------------
@@ -81,7 +84,7 @@ def infer(image_path, feature, task_id, num_tasks):
         output = G(input_tensor, task_vector)
 
     # -------------------------------------------------
-    # Convert back to image
+    # Denormalize [-1,1] → [0,1]
     # -------------------------------------------------
     input_img = (input_tensor.squeeze(0).cpu() + 1) / 2
     output_img = (output.squeeze(0).cpu() + 1) / 2
@@ -92,9 +95,9 @@ def infer(image_path, feature, task_id, num_tasks):
     # -------------------------------------------------
     # Save Results
     # -------------------------------------------------
-    input_save = os.path.join(output_dir, "input_1.png")
-    output_save = os.path.join(output_dir, "output_1.png")
-    compare_save = os.path.join(output_dir, "comparison_1.png")
+    input_save = os.path.join(output_dir, f"{feature}_input.png")
+    output_save = os.path.join(output_dir, f"{feature}_output.png")
+    compare_save = os.path.join(output_dir, f"{feature}_comparison.png")
 
     save_image(input_img, input_save)
     save_image(output_img, output_save)
@@ -110,27 +113,19 @@ def infer(image_path, feature, task_id, num_tasks):
 # Feature Selector
 # ---------------------------------------------------------
 def select_feature():
-
     print("\nSelect Feature:")
-    print("1 → Deblur")
-    print("2 → Low-light Enhancement")
-
-    choice = input("Enter choice: ")
-
+    print("1 -> Deblur")
+    print("2 -> Low-light Enhancement")
+    choice = input("Enter choice: ").strip()
     if choice not in FEATURES:
         print("Invalid choice!")
         exit()
-
     return FEATURES[choice]
-
-
+ 
 # ---------------------------------------------------------
 # Entry Point
 # ---------------------------------------------------------
 if __name__ == "__main__":
-
     feature, task_id, num_tasks = select_feature()
-
-    image_path = input("\nEnter image path: ")
-
+    image_path = input("\nEnter image path: ").strip()
     infer(image_path, feature, task_id, num_tasks)

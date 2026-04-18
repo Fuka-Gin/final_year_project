@@ -57,62 +57,6 @@ def compute_ssim(pred, target):
 
     return torch.tensor(scores).mean()
 
-
-# ---------------------------------------------------------
-# 3. F-Score (Edge-based)
-# ---------------------------------------------------------
-def compute_fscore(pred, target, threshold=0.5):
-    """
-    Edge-based F1 Score (useful for structure preservation)
-    """
-
-    pred = denormalize(pred).mean(dim=1)
-    target = denormalize(target).mean(dim=1)
-
-    pred_bin = (pred > threshold).float()
-    target_bin = (target > threshold).float()
-
-    tp = (pred_bin * target_bin).sum()
-    fp = (pred_bin * (1 - target_bin)).sum()
-    fn = ((1 - pred_bin) * target_bin).sum()
-
-    precision = tp / (tp + fp + 1e-8)
-    recall = tp / (tp + fn + 1e-8)
-
-    f1 = 2 * precision * recall / (precision + recall + 1e-8)
-    return f1
-
-
-# ---------------------------------------------------------
-# 4. Hausdorff Distance
-# ---------------------------------------------------------
-def compute_hausdorff(pred, target, threshold=0.5):
-    """
-    Hausdorff Distance between edge maps
-    """
-
-    pred = denormalize(pred).mean(dim=1)
-    target = denormalize(target).mean(dim=1)
-
-    pred_bin = (pred > threshold).cpu().numpy()
-    target_bin = (target > threshold).cpu().numpy()
-
-    distances = []
-
-    for i in range(pred_bin.shape[0]):
-        pred_pts = np.argwhere(pred_bin[i])
-        target_pts = np.argwhere(target_bin[i])
-
-        if len(pred_pts) == 0 or len(target_pts) == 0:
-            distances.append(0.0)
-        else:
-            d1 = directed_hausdorff(pred_pts, target_pts)[0]
-            d2 = directed_hausdorff(target_pts, pred_pts)[0]
-            distances.append(max(d1, d2))
-
-    return torch.tensor(distances).mean()
-
-
 # ---------------------------------------------------------
 # 5. Unified Evaluation Wrapper
 # ---------------------------------------------------------
@@ -122,7 +66,5 @@ def evaluate_metrics(pred, target):
     """
     return {
         "PSNR": compute_psnr(pred, target).item(),
-        "SSIM": compute_ssim(pred, target).item(),
-        "F-Score": compute_fscore(pred, target).item(),
-        "Hausdorff": compute_hausdorff(pred, target).item()
+        "SSIM": compute_ssim(pred, target).item()
     }

@@ -1,23 +1,10 @@
 import torch
 import torch.nn as nn
 
-
-# ---------------------------------------------------------
-# 1. Squeeze-and-Excitation (Channel Attention)
-# ---------------------------------------------------------
 class SEBlock(nn.Module):
-    """
-    Channel Attention Module (Squeeze-and-Excitation)
-
-    Helps model focus on informative feature channels.
-    Especially useful for deblurring fine textures.
-    """
-
     def __init__(self, channels, reduction=16):
         super().__init__()
-
         self.pool = nn.AdaptiveAvgPool2d(1)
-
         self.fc = nn.Sequential(
             nn.Conv2d(channels, channels // reduction, kernel_size=1),
             nn.ReLU(inplace=True),
@@ -30,32 +17,26 @@ class SEBlock(nn.Module):
         scale = self.fc(scale)
         return x * scale
 
-
-# ---------------------------------------------------------
-# 2. Enhanced Residual Block
-# ---------------------------------------------------------
 class ResidualBlock(nn.Module):
     """
-    Enhanced Residual Block for UcGAN Generator
+    Residual Block used in UcGAN Generator.
 
     Structure:
-        Conv → IN → ReLU
-        Conv → IN
-        Channel Attention (SE)
-        Residual Scaling
+        Conv(3×3, C → C) + InstanceNorm + ReLU
+        Conv(3×3, C → C) + InstanceNorm
         Skip Connection
 
-    Improvements over basic block:
-    - Channel attention improves feature focus
-    - Residual scaling stabilizes GAN training
-    - Better texture recovery for deblurring
+    Notes:
+    - InstanceNorm is preferred over BatchNorm for image-to-image translation
+    - No dropout is used to preserve fine details
+    - Padding preserves spatial resolution
     """
 
     def __init__(self, channels, use_attention=True, residual_scale=0.1):
         super().__init__()
 
         self.residual_scale = residual_scale
-        self.use_attention = use_attention
+        self.use_attention  = use_attention
 
         self.conv1 = nn.Conv2d(
             channels, channels,
@@ -89,11 +70,6 @@ class ResidualBlock(nn.Module):
         out = self.conv2(out)
         out = self.norm2(out)
 
-        # Apply attention if enabled
         if self.use_attention:
             out = self.attention(out)
-
-        # Residual scaling improves GAN stability
-        out = residual + self.residual_scale * out
-
-        return out
+        return residual + self.residual_scale * out
